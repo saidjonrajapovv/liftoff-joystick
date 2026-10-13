@@ -1,0 +1,2 @@
+source C:/esp/liftoff/build/bootloader/gdbinit/symbols
+source C:/esp/liftoff/build/bootloader/gdbinit/connect
