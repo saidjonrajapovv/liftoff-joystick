@@ -12,5 +12,6 @@
       "--background-index",
       "--query-driver=**",
       "--compile-commands-dir=c:\\esp\\liftoff\\build"
-    ]
+    ],
+    "idf.port": "COM4"
 }
