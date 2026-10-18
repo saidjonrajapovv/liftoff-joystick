@@ -4,11 +4,17 @@
 #include "esp_adc/adc_oneshot.h"
 #include "esp_adc/adc_cali_scheme.h"
 #include <stdbool.h>
+#include <stdlib.h>
 
 static const char *TAG = "stick";
-#define NUM_AXES 4
 
-static const adc_channel_t channels[NUM_AXES] = { 
+#define NUM_AXES   4
+#define OVERSAMPLE 16   // reads averaged per axis per loop (noise / sqrt(16) = 4x less)
+#define EMA_K      4    // low-pass strength: bigger = smoother but more lag
+#define DEADBAND   15   // +-15 around 1500 -> exactly 1500
+#define LOG_EVERY  10   // loop runs every 10 ms -> log every 100 ms
+
+static const adc_channel_t channels[NUM_AXES] = {
     ADC_CHANNEL_5, // GPIO6 T
     ADC_CHANNEL_6, // GPIO7 R
     ADC_CHANNEL_3, // GPIO4 E
@@ -29,6 +35,25 @@ static const axis_cal_t axis_cal[NUM_AXES] = {
     { .min = 0, .center = 1685, .max = 3203, .reversed = true }   // A
 };
 
+// Read one channel OVERSAMPLE times, return the average in mV.
+static int read_axis_mv(adc_oneshot_unit_handle_t adc, adc_cali_handle_t cali, adc_channel_t ch)
+{
+    int sum = 0;
+    for (int n = 0; n < OVERSAMPLE; n++) {
+        int raw, mv;
+        ESP_ERROR_CHECK(adc_oneshot_read(adc, ch, &raw));
+        ESP_ERROR_CHECK(adc_cali_raw_to_voltage(cali, raw, &mv));
+        sum += mv;
+    }
+    return sum / OVERSAMPLE;
+}
+
+// One EMA step: move 'state' 1/EMA_K of the way toward 'x'.
+static int ema(int state, int x)
+{
+    return state + (x - state) / EMA_K;
+}
+
 static int map_axis(int mv, const axis_cal_t *c){
     int out;
     if (mv < c->center) {
@@ -41,6 +66,13 @@ static int map_axis(int mv, const axis_cal_t *c){
     }
     if (out < 1000) out = 1000;
     if (out > 2000) out = 2000;
+    return out;
+}
+
+// Snap values close to center to exactly 1500.
+static int apply_deadband(int out)
+{
+    if (abs(out - 1500) < DEADBAND) return 1500;
     return out;
 }
 
@@ -71,19 +103,28 @@ void app_main(void)
         ESP_ERROR_CHECK(adc_cali_create_scheme_curve_fitting(&cali_cfg, &cali[i]));
     }
 
+    // ----- Filter state: lives outside the loop so it survives between iterations -----
+    // Start from a real reading, not 0, so the filter doesn't ramp up from 0 at boot.
+    int filt[NUM_AXES];
+    for (int i = 0; i < NUM_AXES; i++) {
+        filt[i] = read_axis_mv(adc, cali[i], channels[i]);
+    }
+
     // ----- Step D: read loop -----
+    int loop = 0;
     while (1) {
-        int mv[NUM_AXES];
         int out[NUM_AXES];
         for (int i = 0; i < NUM_AXES; i++) {
-            int raw;
-            ESP_ERROR_CHECK(adc_oneshot_read(adc, channels[i], &raw));
-            ESP_ERROR_CHECK(adc_cali_raw_to_voltage(cali[i], raw, &mv[i]));
-            out[i] = map_axis(mv[i], &axis_cal[i]);
+            int mv = read_axis_mv(adc, cali[i], channels[i]);
+            filt[i] = ema(filt[i], mv);
+            out[i] = apply_deadband(map_axis(filt[i], &axis_cal[i]));
         }
 
-        ESP_LOGI(TAG, "   T=%4d R=%4d E=%4d A=%4d", out[0], out[1], out[2], out[3]);
-        ESP_LOGI(TAG, "mV T=%4d R=%4d E=%4d A=%4d", mv[0], mv[1], mv[2], mv[3]);
-        vTaskDelay(pdMS_TO_TICKS(100));
+        if (loop % LOG_EVERY == 0) {
+            ESP_LOGI(TAG, "   T=%4d R=%4d E=%4d A=%4d", out[0], out[1], out[2], out[3]);
+            ESP_LOGI(TAG, "mV T=%4d R=%4d E=%4d A=%4d", filt[0], filt[1], filt[2], filt[3]);
+        }
+        loop++;
+        vTaskDelay(pdMS_TO_TICKS(10));
     }
 }
