@@ -5,6 +5,7 @@
 #include "esp_adc/adc_cali_scheme.h"
 #include <stdbool.h>
 #include <stdlib.h>
+#include "usb_hid.h"
 
 static const char *TAG = "stick";
 
@@ -78,6 +79,8 @@ static int apply_deadband(int out)
 
 void app_main(void)
 {
+    ESP_ERROR_CHECK(usb_hid_init());
+
     // ----- Step A: one ADC unit -----
     adc_oneshot_unit_handle_t adc;
     adc_oneshot_unit_init_cfg_t unit_cfg = {
@@ -119,6 +122,8 @@ void app_main(void)
             filt[i] = ema(filt[i], mv);
             out[i] = apply_deadband(map_axis(filt[i], &axis_cal[i]));
         }
+
+        usb_hid_send(out[0], out[1], out[2], out[3]);
 
         if (loop % LOG_EVERY == 0) {
             ESP_LOGI(TAG, "   T=%4d R=%4d E=%4d A=%4d", out[0], out[1], out[2], out[3]);
