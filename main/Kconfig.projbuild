@@ -1,0 +1,7 @@
+menu "Liftoff Joystick"
+
+    config LIFTOFF_TFT
+        bool "ST7735 TFT display connected"
+        default y
+
+endmenu
