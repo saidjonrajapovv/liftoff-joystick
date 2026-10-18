@@ -85,7 +85,7 @@ git clone https://github.com/saidjonrajapovv/liftoff-joystick.git
 cd liftoff-joystick
 idf.py set-target esp32s3      # only needed if you start without the included sdkconfig
 idf.py build                   # first build downloads TinyUSB from the Espressif component registry
-idf.py -p COM4 flash monitor   # use your UART port; exit the monitor with Ctrl+]
+idf.py -p COMx flash monitor   # use your UART port; exit the monitor with Ctrl+]
 ```
 
 Then connect the **native USB** port to the PC. Windows plays the "device connected" sound, and a joystick called
