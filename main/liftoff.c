@@ -6,7 +6,6 @@
 #include <stdbool.h>
 
 static const char *TAG = "stick";
-static const char *V = "volta";
 #define NUM_AXES 4
 
 static const adc_channel_t channels[NUM_AXES] = { 
@@ -83,8 +82,8 @@ void app_main(void)
             out[i] = map_axis(mv[i], &axis_cal[i]);
         }
 
-        ESP_LOGI(TAG, "T=%4d R=%4d E=%4d A=%4d", out[0], out[1], out[2], out[3]);
-        ESP_LOGI(V, "T=%4d R=%4d E=%4d A=%4d", mv[0], mv[1], mv[2], mv[3]);
+        ESP_LOGI(TAG, "   T=%4d R=%4d E=%4d A=%4d", out[0], out[1], out[2], out[3]);
+        ESP_LOGI(TAG, "mV T=%4d R=%4d E=%4d A=%4d", mv[0], mv[1], mv[2], mv[3]);
         vTaskDelay(pdMS_TO_TICKS(100));
     }
 }
